@@ -1,65 +1,57 @@
 const express = require('express');
-const cors = require('cors');
+const cors = require('cors'); 
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 
-// 1. CONFIGURACIÓN DE PERMISOS (CORS)
-// Esto permite que tu frontend en Vercel se comunique con este backend en Render
-app.use(cors());
+// Permite la comunicación con Vercel
+app.use(cors()); 
 app.use(express.json());
 
-// 2. INICIALIZACIÓN DE LA IA
-// Usamos la variable de entorno que configuraste en el panel de Render
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// 3. RUTA DE PRUEBA (HEALTH CHECK)
-// Si entras a la URL de Render, verás este mensaje si todo está OK
+// Confirmación visual al entrar a la URL de Render
 app.get('/', (req, res) => {
-  res.send('Servidor de Auditoría 6M activo y funcionando con Gemini 2.5');
+  res.send('Servidor de Auditoría 6M activo y listo en server.js');
 });
 
-// 4. RUTA PRINCIPAL DE DIAGNÓSTICO
 app.post('/api/diagnostico', async (req, res) => {
   try {
     const { prompt, systemPrompt } = req.body;
+    
+    // Modelo detectado en tu PowerShell
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // Configuración del modelo 2.5-flash (el más rápido de 2026)
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
-      generationConfig: { 
-        responseMimeType: "application/json",
-        temperature: 0.1 // Baja temperatura para mayor precisión técnica
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\n" + prompt }] }],
+      generationConfig: {
+        temperature: 0.1, 
       }
     });
 
-    // Llamada a la IA combinando el contexto y la instrucción del sistema
-    const result = await model.generateContent(`${systemPrompt}\n\n${prompt}`);
     const responseText = result.response.text();
+    console.log("Respuesta bruta de la IA:", responseText);
 
-    // Intentamos parsear el JSON que nos envía Google
-    try {
-      const cleanJson = JSON.parse(responseText);
-      res.json(cleanJson);
-    } catch (parseError) {
-      // Si la IA envía texto extra, lo limpiamos manualmente
-      const startIdx = responseText.indexOf('{');
-      const endIdx = responseText.lastIndexOf('}');
-      const extractedJson = responseText.substring(startIdx, endIdx + 1);
-      res.json(JSON.parse(extractedJson));
+    // EXTRACTOR DE JSON: Busca el primer '{' y el último '}'
+    const startIdx = responseText.indexOf('{');
+    const endIdx = responseText.lastIndexOf('}');
+    
+    if (startIdx === -1 || endIdx === -1) {
+      throw new Error("La IA no devolvió un formato JSON válido");
     }
 
+    const jsonString = responseText.substring(startIdx, endIdx + 1);
+    
+    // Enviamos el JSON puro al frontend
+    res.json(JSON.parse(jsonString));
+
   } catch (error) {
-    console.error("ERROR EN EL SERVIDOR:", error);
-    res.status(500).json({ 
-      error: "Error en la comunicación con la IA",
-      detalle: error.message 
-    });
+    console.error("Error detallado en el servidor:", error);
+    res.status(500).json({ error: "Error al procesar los datos de la IA" });
   }
 });
 
-// 5. INICIO DEL SERVIDOR
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en el puerto ${PORT}`);
+  console.log(`Servidor corriendo en puerto ${PORT}`);
 });
