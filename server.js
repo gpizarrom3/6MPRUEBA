@@ -20,28 +20,36 @@ app.post('/api/diagnostico', async (req, res) => {
   try {
     const { prompt, systemPrompt } = req.body;
     
-    // Inicializamos el modelo 2.5-flash
     const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-    // Configuramos la generación de forma más compatible
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\n" + prompt }] }],
       generationConfig: {
-        // Quitamos el responseMimeType de aquí si la librería da problemas
-        // y nos aseguramos de que el prompt pida JSON explícitamente
-        temperature: 0.7,
+        temperature: 0.1, // Bajamos la temperatura para que sea más preciso y menos "hablador"
       }
     });
 
     const responseText = result.response.text();
+    console.log("Respuesta bruta de la IA:", responseText); // Esto te servirá para ver el error en los logs
+
+    // --- FUNCIÓN EXTRACTORA DE JSON ---
+    // Esta parte busca el primer '{' y el último '}' para ignorar cualquier texto extra
+    const startIdx = responseText.indexOf('{');
+    const endIdx = responseText.lastIndexOf('}');
     
-    // Limpiamos la respuesta por si la IA añade bloques de código Markdown (```json)
-    const cleanJson = responseText.replace(/```json|```/g, "").trim();
+    if (startIdx === -1 || endIdx === -1) {
+      throw new Error("La IA no devolvió un formato JSON válido");
+    }
+
+    const jsonString = responseText.substring(startIdx, endIdx + 1);
     
-    res.json(JSON.parse(cleanJson));
+    // Parseamos el JSON limpio
+    const finalData = JSON.parse(jsonString);
+    res.json(finalData);
+
   } catch (error) {
-    console.error("Error detallado:", error);
-    res.status(500).json({ error: "Error en la comunicación con la IA" });
+    console.error("Error detallado en el servidor:", error);
+    res.status(500).json({ error: "Error al procesar los datos de la IA" });
   }
 });
 
