@@ -19,10 +19,11 @@ app.get('/', (req, res) => {
 app.post('/api/diagnostico', async (req, res) => {
   try {
     const { prompt, systemPrompt, schema } = req.body;
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash", 
-      generationConfig: { responseMimeType: "application/json" }
-    });
+// ... dentro de app.post('/api/diagnostico', ...)
+const model = genAI.getGenerativeModel({ 
+  model: "gemini-2.5-flash", // <--- Asegúrate de que diga 2.5-flash
+  generationConfig: { responseMimeType: "application/json" }
+});
 
     const result = await model.generateContent([
       { text: systemPrompt },
