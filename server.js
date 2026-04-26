@@ -12,18 +12,18 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Confirmación visual al entrar a la URL de Render
 app.get('/', (req, res) => {
-  res.send('Servidor de Auditoría 6M activo y listo (Versión Blindada v2)');
+  res.send('Servidor de Auditoría 6M activo - Versión 2.5 Pro (2026)');
 });
 
 app.post('/api/diagnostico', async (req, res) => {
   try {
     const { prompt, systemPrompt } = req.body;
     
-    // 1. Configuración del modelo con MimeType JSON (Esto obliga a la IA a no hablar de más)
+    // 1. Configuración con el modelo correcto para 2026
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash", // He bajado a 1.5 por estabilidad, pero puedes usar 2.0 si prefieres
+      model: "gemini-2.5-flash", // Modelo actualizado y detectado en tu sistema
       generationConfig: {
-        responseMimeType: "application/json",
+        responseMimeType: "application/json", // Fuerza a la IA a responder solo JSON
         temperature: 0.1, 
       }
     });
@@ -32,22 +32,23 @@ app.post('/api/diagnostico', async (req, res) => {
       contents: [{ 
         role: 'user', 
         parts: [{ 
-          text: systemPrompt + "\n\nINSTRUCCIÓN FINAL: Responde únicamente con el objeto JSON. Sin introducciones ni formatos markdown.\n\n" + prompt 
+          text: systemPrompt + "\n\nIMPORTANTE: Responde únicamente con un objeto JSON válido. No incluyas texto extra.\n\n" + prompt 
         }] 
       }],
     });
 
     const responseText = result.response.text();
-    console.log("Respuesta recibida de la IA:", responseText);
+    console.log("Respuesta técnica de la IA:", responseText);
 
-    // 2. Intento de parseo directo
+    // 2. Sistema de Doble Validación (Parsing)
     try {
-      const jsonData = JSON.parse(responseText);
-      res.json(jsonData);
+      // Intento A: Parseo directo (lo más rápido)
+      const data = JSON.parse(responseText);
+      res.json(data);
     } catch (parseError) {
-      console.warn("Fallo el parseo directo, intentando extracción manual...");
+      console.warn("Fallo el parseo directo, activando extractor de emergencia...");
       
-      // 3. Extractor de emergencia (Tu código original mejorado)
+      // Intento B: Extracción manual de llaves { } por si la IA metió ruido
       const startIdx = responseText.indexOf('{');
       const endIdx = responseText.lastIndexOf('}');
       
@@ -55,12 +56,12 @@ app.post('/api/diagnostico', async (req, res) => {
         const jsonString = responseText.substring(startIdx, endIdx + 1);
         res.json(JSON.parse(jsonString));
       } else {
-        throw new Error("La IA no generó una estructura JSON válida");
+        throw new Error("La IA no generó una estructura de datos válida");
       }
     }
 
   } catch (error) {
-    console.error("Error detallado en el servidor:", error);
+    console.error("Error crítico en el backend:", error);
     res.status(500).json({ 
       error: "Error al procesar los datos de la IA",
       details: error.message 
@@ -70,5 +71,5 @@ app.post('/api/diagnostico', async (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+  console.log(`Motor de Auditoría corriendo en puerto ${PORT}`);
 });
