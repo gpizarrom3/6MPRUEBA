@@ -13,31 +13,29 @@ app.post('/api/diagnostico', async (req, res) => {
     const { prompt } = req.body;
     const model = genAI.getGenerativeModel({ 
       model: "gemini-2.5-flash",
-      generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
+      generationConfig: { responseMimeType: "application/json", temperature: 0.3 }
     });
 
-    // DETERMINAR SI ES ENTREVISTA O REPORTE FINAL
     const esReporteFinal = prompt.includes("RESPUESTAS");
 
     const systemPrompt = esReporteFinal 
-      ? `Actúa como un Experto en Análisis de Causa Raíz (ACR). 
-         Basado en las respuestas de la auditoría 6M, genera un informe final estrictamente en este formato JSON:
-         {
-           "resumen_6m": {
-             "mano_de_obra": "resumen...",
-             "maquinaria": "resumen...",
-             "metodos": "resumen...",
-             "materiales": "resumen...",
-             "medio_ambiente": "resumen...",
-             "medicion": "resumen..."
-           },
-           "hipotesis": "La causa raíz probable es...",
-           "recomendaciones": ["rec 1", "rec 2", "rec 3"]
+      ? `Actúa como Experto en ACR. Genera un informe técnico profesional.
+         JSON: {
+           "resumen_6m": { "Mano de Obra": "...", "Maquinaria": "...", "Métodos": "...", "Materiales": "...", "Medio Ambiente": "...", "Medición": "..." },
+           "hipotesis": "...",
+           "recomendaciones": ["...", "..."]
          }`
-      : `Actúa como Auditor Senior 6M. Genera 6 preguntas críticas (una por cada M de Ishikawa) para investigar el fallo.
-         Responde estrictamente en este formato JSON:
-         {
-           "preguntas": ["P1 (Mano Obra)", "P2 (Maquinaria)", "P3 (Métodos)", "P4 (Materiales)", "P5 (Medio Ambiente)", "P6 (Medición)"]
+      : `Eres un Consultor Senior 6M. Analiza el fallo y genera TODAS las preguntas necesarias para un ALCANCE PRELIMINAR (sin pedir datos exactos). 
+         Organiza por categorías de Ishikawa. Para cada pregunta, añade un 'aviso' o 'implicancia' técnica.
+         JSON: {
+           "categorias": [
+             {
+               "nombre": "Maquinaria",
+               "preguntas": [
+                 { "texto": "¿...", "aviso": "Las revisiones de hardware deben ser por personal certificado." }
+               ]
+             }
+           ]
          }`;
 
     const result = await model.generateContent({
@@ -45,12 +43,10 @@ app.post('/api/diagnostico', async (req, res) => {
     });
 
     res.json(JSON.parse(result.response.text()));
-
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: "Error en la IA" });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Servidor 6M listo`));
+app.listen(PORT, () => console.log("Servidor Pro 6M activo"));
