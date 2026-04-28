@@ -4,42 +4,34 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 
-// 1. CONFIGURACIÓN DE CORS (LISTA DE INVITADOS VIP)
+// Lista de URLs permitidas (Vercel + Local)
 const originsPermitidos = [
-  'https://6-mpruebafrontend.vercel.app', 
-  'https://6-mpruebafrontend-git-main-guillermos-projects-bff23201.vercel.app', 
+  'https://6-mpruebafrontend.vercel.app',
+  'https://6-mpruebafrontend-git-main-guillermos-projects-bff23201.vercel.app',
   'http://localhost:3000'
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || originsPermitidos.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Bloqueado por CORS: URL no autorizada'));
-    }
-  },
+  origin: originsPermitidos,
   methods: ['GET', 'POST'],
   credentials: true
 }));
 
 app.use(express.json());
 
-// INICIALIZACIÓN DE GOOGLE AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// RUTA RAÍZ (Para saber que el servidor está vivo)
 app.get('/', (req, res) => {
-  res.send("ACR.RADIX Engine - Status: Operacional (Gemini 2.5 Active)");
+  res.send("ACR.RADIX Server - Exclusivo Gemini 2.5 Flash");
 });
 
-// FUNCIÓN AUXILIAR PARA REINTENTOS (ESPERA EN MILISEGUNDOS)
+// Función de espera para reintentos
 const wait = (ms) => new Promise(res => setTimeout(res, ms));
 
-// RUTA PRINCIPAL DE DIAGNÓSTICO
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
   
+  // CONFIGURACIÓN ÚNICA: Solo usamos tu modelo de pago
   const model = genAI.getGenerativeModel({ 
     model: "gemini-2.5-flash", 
     generationConfig: { responseMimeType: "application/json", temperature: 0.3 }
@@ -47,16 +39,8 @@ app.post('/api/diagnostico', async (req, res) => {
 
   const esReporteFinal = prompt.includes("RESPUESTAS");
   const systemPrompt = esReporteFinal 
-    ? `Actúa como Experto en ACR. Genera un dictamen técnico profesional. Responde estrictamente en JSON:
-       {
-         "resumen_6m": { "Mano de Obra": "...", "Maquinaria": "...", "Métodos": "...", "Materiales": "...", "Medio Ambiente": "...", "Medición": "..." },
-         "hipotesis": "...",
-         "recomendaciones": ["...", "..."]
-       }`
-    : `Eres un Consultor Senior 6M. Analiza el fallo y genera preguntas 6M. Responde estrictamente en JSON:
-       {
-         "categorias": [ { "nombre": "...", "preguntas": [ { "texto": "...", "aviso": "..." } ] } ]
-       }`;
+    ? `Actúa como Experto en ACR Industrial. Genera un dictamen profesional en JSON.`
+    : `Eres un consultor 6M. Genera un cuestionario técnico en JSON.`;
 
   let intentos = 0;
   const maxIntentos = 3;
@@ -68,31 +52,30 @@ app.post('/api/diagnostico', async (req, res) => {
       });
 
       const responseText = result.response.text();
-      
-      // LIMPIEZA DE MARCADO (Evita errores de parseo si la IA envía ```json)
+      // Limpiamos el JSON por si viene con etiquetas markdown
       const cleanJson = responseText.replace(/```json|```/g, "").trim();
       
-      const parsedData = JSON.parse(cleanJson);
-      return res.json(parsedData);
+      return res.json(JSON.parse(cleanJson));
 
     } catch (error) {
       intentos++;
-      console.error(`Intento ${intentos} - Error:`, error.message);
+      console.error(`Intento ${intentos} fallido con 2.5 Flash:`, error.message);
 
-      // Si el error es por saturación (503) reintentamos tras 3 segundos
+      // Si es un error de saturación (503), esperamos y reintentamos con el MISMO modelo
       if (error.message.includes('503') && intentos < maxIntentos) {
         await wait(3000); 
-      } else {
-        // Si ya no hay más intentos o es otro error, respondemos con el fallo
-        return res.status(500).json({ 
-          error: "Falla en el motor de IA", 
-          details: error.message 
+      } else if (intentos === maxIntentos) {
+        return res.status(503).json({ 
+          error: "Saturación en Google 2.5", 
+          details: "El modelo está bajo alta demanda. Reintente en un momento." 
         });
+      } else if (!error.message.includes('503')) {
+        // Si es otro tipo de error (como seguridad o formato), cortamos de inmediato
+        return res.status(500).json({ error: "Falla interna", details: error.message });
       }
     }
   }
 });
 
-// INICIO DEL SERVIDOR
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`ACR.RADIX: Corriendo en puerto ${PORT}`));
+app.listen(PORT, () => console.log("Backend ACR.RADIX: Corriendo con Gemini 2.5"));
