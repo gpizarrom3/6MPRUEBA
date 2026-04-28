@@ -8,11 +8,15 @@ app.use(cors());
 app.use(express.json());
 
 // 1. Configuración de Google Gemini
-// Asegúrate de tener GEMINI_API_KEY en tus variables de entorno de Render
+// Forzamos el uso de la versión estable 'v1' para evitar el error 404 de la 'v1beta'
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Usamos gemini-1.5-flash que es el modelo estable y rápido
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// CONFIGURACIÓN MODIFICADA: 
+// Pasamos un segundo objeto con apiVersion: 'v1'
+const model = genAI.getGenerativeModel(
+    { model: "gemini-1.5-flash" },
+    { apiVersion: 'v1' }
+);
 
 // 2. Ruta para el diagnóstico
 app.post('/api/diagnostico', async (req, res) => {
@@ -23,19 +27,20 @@ app.post('/api/diagnostico', async (req, res) => {
     }
 
     try {
-        // Llamada a la IA
+        // Llamada a la generación de contenido
         const result = await model.generateContent(prompt);
         const response = await result.response;
         const text = response.text();
 
-        // Intentamos limpiar la respuesta por si la IA devuelve Markdown (```json ... ```)
+        // Limpieza de formato Markdown si la IA lo incluye
         const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
         
         try {
+            // Intentamos devolver el objeto JSON parseado
             const jsonResponse = JSON.parse(cleanJson);
             res.json(jsonResponse);
         } catch (parseError) {
-            // Si no es JSON puro, enviamos el texto tal cual
+            // Si la respuesta no es un JSON válido, enviamos el texto en un campo 'hipotesis'
             res.json({ hipotesis: text });
         }
 
