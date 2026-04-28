@@ -19,8 +19,7 @@ app.use(express.json());
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // ✅ Modelo instanciado UNA sola vez fuera del handler
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // <--- Cambia 2.0 por 1.5
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
 
