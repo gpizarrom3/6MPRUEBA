@@ -6,43 +6,43 @@ const app = express();
 app.use(cors()); 
 app.use(express.json());
 
-// Inicializa la IA
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Evita el error "Cannot GET /"
 app.get('/', (req, res) => {
-  res.send("ACR.RADIX Core - Engine 3.0 Operacional");
+  res.send("ACR.RADIX Server - Online");
 });
 
 app.post('/api/diagnostico', async (req, res) => {
   try {
     const { prompt } = req.body;
-
-    // --- CAMBIO CLAVE: USAMOS GEMINI 3 FLASH (El estándar de 2026) ---
-    // Si prefieres usar la versión estable anterior, usa "gemini-1.5-flash"
-    // pero asegúrate de que tu librería esté actualizada: npm install @google/generative-ai@latest
+    
+    // RESTAURADO: Volvemos al modelo que SÍ te funcionaba
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-3-flash", // <--- Nombre actualizado
-      generationConfig: { 
-        responseMimeType: "application/json", 
-        temperature: 0.2 
-      }
+      model: "gemini-2.5-flash", 
+      generationConfig: { responseMimeType: "application/json", temperature: 0.3 }
     });
 
     const esReporteFinal = prompt.includes("RESPUESTAS");
 
     const systemPrompt = esReporteFinal 
-      ? `Actúa como Experto en ACR Forense. Genera un dictamen técnico en JSON:
+      ? `Actúa como Experto en ACR. Genera un informe técnico profesional.
+         Responde ESTRICTAMENTE en este formato JSON:
          {
            "resumen_6m": { "Mano de Obra": "...", "Maquinaria": "...", "Métodos": "...", "Materiales": "...", "Medio Ambiente": "...", "Medición": "..." },
            "hipotesis": "...",
            "recomendaciones": ["...", "..."]
          }`
-      : `Eres un Consultor Senior 6M. Genera un protocolo de preguntas 6M en JSON:
+      : `Eres un Consultor Senior 6M. Analiza el fallo y genera TODAS las preguntas necesarias para un ALCANCE PRELIMINAR. 
+         Organiza por categorías de Ishikawa. Para cada pregunta, añade un 'aviso' técnico.
+         Responde ESTRICTAMENTE en este formato JSON:
          {
            "categorias": [
              {
-               "nombre": "...",
-               "preguntas": [ { "texto": "...", "aviso": "..." } ]
+               "nombre": "Maquinaria",
+               "preguntas": [
+                 { "texto": "¿...", "aviso": "..." }
+               ]
              }
            ]
          }`;
@@ -51,24 +51,30 @@ app.post('/api/diagnostico', async (req, res) => {
       contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\nDATOS: " + prompt }] }],
     });
 
+    // --- EL CAMBIO VITAL AQUÍ ---
     const responseText = result.response.text();
     
-    // Limpieza de seguridad por si la IA incluye markdown
+    // Limpiamos la respuesta de posibles bloques de código markdown (```json ... ```)
+    // que es lo que rompe el JSON.parse y causa el Error 500
     const cleanJson = responseText.replace(/```json|```/g, "").trim();
-    
-    res.json(JSON.parse(cleanJson));
+
+    try {
+      const parsedData = JSON.parse(cleanJson);
+      res.json(parsedData);
+    } catch (parseError) {
+      console.error("Error al parsear JSON:", responseText);
+      // Si falla el parseo, enviamos un objeto con la hipótesis cruda para no perder la info
+      res.json({ 
+        hipotesis: "Error de formato en IA, revise logs.",
+        error_raw: responseText 
+      });
+    }
 
   } catch (error) {
-    console.error("ERROR EN MOTOR ACR:", error);
-    
-    // Si vuelve a dar 404, este mensaje te ayudará a diagnosticar
-    res.status(500).json({ 
-      error: "Falla de vinculación con Gemini", 
-      details: error.message,
-      suggestion: "Verifica que tu API Key tenga acceso al modelo gemini-3-flash o actualiza el paquete @google/generative-ai"
-    });
+    console.error("ERROR EN LA IA:", error);
+    res.status(500).json({ error: "Falla en el motor de IA", details: error.message });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("ACR.RADIX: Motor de IA iniciado."));
+app.listen(PORT, () => console.log("Servidor ACR.RADIX activo con gemini-2.5-flash"));
