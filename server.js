@@ -3,75 +3,67 @@ const cors = require('cors');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
-app.use(cors()); 
+
+// Configuración de seguridad para tu frontend en Vercel
+app.use(cors({
+  origin: 'https://6-mpruebafrontend-git-main-guillermos-projects-bff23201.vercel.app'
+})); 
 app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.get('/', (req, res) => {
-  res.send("ACR.RADIX Core - Resiliencia Activa");
+  res.send("ACR.RADIX Core - Engine 2.5 (Modo de Alta Precisión)");
 });
+
+// Función de apoyo para esperar (delay)
+const wait = (ms) => new Promise(res => setTimeout(res, ms));
 
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
+  const model = genAI.getGenerativeModel({ 
+    model: "gemini-2.5-flash", 
+    generationConfig: { responseMimeType: "application/json", temperature: 0.3 }
+  });
+
   const esReporteFinal = prompt.includes("RESPUESTAS");
-
   const systemPrompt = esReporteFinal 
-    ? `Actúa como Experto en ACR. Genera un dictamen técnico en JSON:
-       {
-         "resumen_6m": { "Mano de Obra": "...", "Maquinaria": "...", "Métodos": "...", "Materiales": "...", "Medio Ambiente": "...", "Medición": "..." },
-         "hipotesis": "...",
-         "recomendaciones": ["...", "..."]
-       }`
-    : `Eres un Consultor Senior 6M. Genera un protocolo de preguntas 6M en JSON:
-       {
-         "categorias": [ { "nombre": "...", "preguntas": [ { "texto": "...", "aviso": "..." } ] } ]
-       }`;
+    ? `Actúa como Experto en ACR. Genera un informe técnico profesional en JSON.`
+    : `Eres un Consultor Senior 6M. Genera un cuestionario técnico en JSON.`;
 
-  // LISTA DE MODELOS POR PRIORIDAD
-  // Intentamos con el 2.5, si falla por 503, saltamos al 1.5 o al 3.
-  const modelosPrioritarios = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-3-flash"];
-  
-  let exito = false;
-  let ultimoError = null;
+  let intentos = 0;
+  const maxIntentos = 3;
 
-  for (const nombreModelo of modelosPrioritarios) {
-    if (exito) break;
-
+  while (intentos < maxIntentos) {
     try {
-      console.log(`Intentando diagnóstico con: ${nombreModelo}...`);
-      const model = genAI.getGenerativeModel({ 
-        model: nombreModelo, 
-        generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
-      });
-
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\nDATOS: " + prompt }] }],
       });
 
       const responseText = result.response.text();
+      // Limpieza vital para evitar el "No disponible"
       const cleanJson = responseText.replace(/```json|```/g, "").trim();
       
-      res.json(JSON.parse(cleanJson));
-      exito = true;
-      console.log(`Éxito con ${nombreModelo}`);
+      return res.json(JSON.parse(cleanJson));
 
     } catch (error) {
-      console.error(`Falla en ${nombreModelo}:`, error.message);
-      ultimoError = error.message;
-      // Si el error no es de saturación (503), quizás no valga la pena reintentar, 
-      // pero por ahora probaremos el siguiente modelo en la lista.
-    }
-  }
+      intentos++;
+      console.error(`Intento ${intentos} fallido:`, error.message);
 
-  if (!exito) {
-    res.status(503).json({ 
-      error: "Saturación Global de IA", 
-      details: "Todos los modelos de respaldo están bajo alta demanda. Reintente en un momento.",
-      log: ultimoError
-    });
+      // Si es un error de saturación (503) y no hemos superado los intentos, esperamos 3 segundos
+      if (error.message.includes('503') && intentos < maxIntentos) {
+        console.log("Servidor saturado. Reintentando en 3 segundos...");
+        await wait(3000); 
+      } else {
+        // Si es otro tipo de error o ya no hay más intentos, enviamos la falla
+        return res.status(500).json({ 
+          error: "Falla en el motor de IA", 
+          details: error.message 
+        });
+      }
+    }
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("ACR.RADIX: Motor con redundancia iniciado."));
+app.listen(PORT, () => console.log("ACR.RADIX: Motor 2.5 Flash con Reintento Activo"));
