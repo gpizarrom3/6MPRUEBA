@@ -12,8 +12,10 @@ app.post('/api/diagnostico', async (req, res) => {
 
     try {
         const API_KEY = process.env.GEMINI_API_KEY;
-        // Probamos con la URL de producción estable
-        const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+        
+        // USAMOS EL MODELO QUE APARECE PRIMERO EN TU LISTA
+        // Cambiamos v1 por v1beta porque es donde aparece listado tu modelo
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
         const response = await fetch(url, {
             method: 'POST',
@@ -27,12 +29,13 @@ app.post('/api/diagnostico', async (req, res) => {
 
         if (!response.ok) {
             console.error("Error detallado:", data);
-            return res.status(response.status).json({ 
-                error: data.error?.message || "Error en la API de Google" 
-            });
+            return res.status(response.status).json({ error: data.error?.message });
         }
 
+        // Estructura de respuesta estándar de Gemini
         const aiText = data.candidates[0].content.parts[0].text;
+        
+        // Limpiamos el JSON por si la IA pone texto extra
         const cleanJson = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
         
         try {
@@ -46,4 +49,6 @@ app.post('/api/diagnostico', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log(`Servidor activo en Chile/Render puerto ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`✅ Servidor AUDITORIA-6M activo con Gemini 2.5 Flash`);
+});
