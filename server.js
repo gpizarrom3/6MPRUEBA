@@ -21,38 +21,41 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
   
-  // Nombres de modelos estándar que NO fallan (v1/v1beta)
-  const modelos = ["gemini-1.5-flash", "gemini-pro"];
+  // NOMBRES OFICIALES 2026: gemini-1.5-flash es el estándar de mayor compatibilidad
+  const modeloTitular = "gemini-1.5-flash";
   
   const esReporteFinal = prompt.includes("RESPUESTAS");
   const systemPrompt = esReporteFinal 
-    ? `Eres un experto en ACR. Responde únicamente con un objeto JSON: {"hipotesis": "...", "recomendaciones": []}`
-    : `Eres un consultor 6M. Responde únicamente con un objeto JSON: {"categorias": [{"nombre": "...", "preguntas": [{"texto": "..."}]}]}`;
+    ? `Eres un experto en ACR. Responde UNICAMENTE un objeto JSON: {"hipotesis": "...", "recomendaciones": []}`
+    : `Eres un consultor 6M. Responde UNICAMENTE un objeto JSON: {"categorias": [{"nombre": "...", "preguntas": [{"texto": "..."}]}]}`;
 
-  for (const nombre of modelos) {
-    try {
-      console.log(`Intentando con: ${nombre}`);
-      const model = genAI.getGenerativeModel({ model: nombre });
-      
-      const result = await model.generateContent(systemPrompt + "\n\nDATOS: " + prompt);
-      const text = result.response.text();
+  try {
+    console.log(`Conectando con ${modeloTitular}...`);
+    const model = genAI.getGenerativeModel({ model: modeloTitular });
+    
+    const result = await model.generateContent(systemPrompt + "\n\nDATOS: " + prompt);
+    const text = result.response.text();
 
-      // ESTO ES CLAVE: Extrae el JSON incluso si la IA manda basura alrededor
-      const jsonMatch = text.match(/\{[\s\S]*\}/); 
-      if (!jsonMatch) throw new Error("No se encontró JSON en la respuesta");
-      
-      const cleanJson = JSON.parse(jsonMatch[0]);
-      console.log(`✅ Éxito con ${nombre}`);
-      return res.json(cleanJson);
+    // EXTRACCIÓN DE SEGURIDAD: Busca el JSON incluso si hay texto extra
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}') + 1;
+    const jsonString = text.substring(start, end);
+    
+    const cleanJson = JSON.parse(jsonString);
+    console.log("✅ Respuesta procesada con éxito");
+    return res.json(cleanJson);
 
-    } catch (error) {
-      console.error(`Error en ${nombre}:`, error.message);
-      continue; 
-    }
+  } catch (error) {
+    console.error(`Error en el motor:`, error.message);
+    
+    // Si el error es de cuota o saturación, devolvemos un mensaje claro
+    const status = error.message.includes('503') ? 503 : 500;
+    return res.status(status).json({ 
+      error: "Error en el motor de IA", 
+      details: error.message 
+    });
   }
-
-  res.status(500).json({ error: "Todos los modelos fallaron. Revise su API KEY o cuota." });
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Servidor ACR.RADIX estable."));
+app.listen(PORT, () => console.log("Servidor ACR.RADIX en línea con Gemini 1.5 Flash"));
