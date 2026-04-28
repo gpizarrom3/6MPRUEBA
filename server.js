@@ -8,73 +8,70 @@ app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Evita el error "Cannot GET /"
 app.get('/', (req, res) => {
-  res.send("ACR.RADIX Server - Online");
+  res.send("ACR.RADIX Core - Resiliencia Activa");
 });
 
 app.post('/api/diagnostico', async (req, res) => {
-  try {
-    const { prompt } = req.body;
-    
-    // RESTAURADO: Volvemos al modelo que SÍ te funcionaba
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash", 
-      generationConfig: { responseMimeType: "application/json", temperature: 0.3 }
-    });
+  const { prompt } = req.body;
+  const esReporteFinal = prompt.includes("RESPUESTAS");
 
-    const esReporteFinal = prompt.includes("RESPUESTAS");
+  const systemPrompt = esReporteFinal 
+    ? `Actúa como Experto en ACR. Genera un dictamen técnico en JSON:
+       {
+         "resumen_6m": { "Mano de Obra": "...", "Maquinaria": "...", "Métodos": "...", "Materiales": "...", "Medio Ambiente": "...", "Medición": "..." },
+         "hipotesis": "...",
+         "recomendaciones": ["...", "..."]
+       }`
+    : `Eres un Consultor Senior 6M. Genera un protocolo de preguntas 6M en JSON:
+       {
+         "categorias": [ { "nombre": "...", "preguntas": [ { "texto": "...", "aviso": "..." } ] } ]
+       }`;
 
-    const systemPrompt = esReporteFinal 
-      ? `Actúa como Experto en ACR. Genera un informe técnico profesional.
-         Responde ESTRICTAMENTE en este formato JSON:
-         {
-           "resumen_6m": { "Mano de Obra": "...", "Maquinaria": "...", "Métodos": "...", "Materiales": "...", "Medio Ambiente": "...", "Medición": "..." },
-           "hipotesis": "...",
-           "recomendaciones": ["...", "..."]
-         }`
-      : `Eres un Consultor Senior 6M. Analiza el fallo y genera TODAS las preguntas necesarias para un ALCANCE PRELIMINAR. 
-         Organiza por categorías de Ishikawa. Para cada pregunta, añade un 'aviso' técnico.
-         Responde ESTRICTAMENTE en este formato JSON:
-         {
-           "categorias": [
-             {
-               "nombre": "Maquinaria",
-               "preguntas": [
-                 { "texto": "¿...", "aviso": "..." }
-               ]
-             }
-           ]
-         }`;
+  // LISTA DE MODELOS POR PRIORIDAD
+  // Intentamos con el 2.5, si falla por 503, saltamos al 1.5 o al 3.
+  const modelosPrioritarios = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-3-flash"];
+  
+  let exito = false;
+  let ultimoError = null;
 
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\nDATOS: " + prompt }] }],
-    });
-
-    // --- EL CAMBIO VITAL AQUÍ ---
-    const responseText = result.response.text();
-    
-    // Limpiamos la respuesta de posibles bloques de código markdown (```json ... ```)
-    // que es lo que rompe el JSON.parse y causa el Error 500
-    const cleanJson = responseText.replace(/```json|```/g, "").trim();
+  for (const nombreModelo of modelosPrioritarios) {
+    if (exito) break;
 
     try {
-      const parsedData = JSON.parse(cleanJson);
-      res.json(parsedData);
-    } catch (parseError) {
-      console.error("Error al parsear JSON:", responseText);
-      // Si falla el parseo, enviamos un objeto con la hipótesis cruda para no perder la info
-      res.json({ 
-        hipotesis: "Error de formato en IA, revise logs.",
-        error_raw: responseText 
+      console.log(`Intentando diagnóstico con: ${nombreModelo}...`);
+      const model = genAI.getGenerativeModel({ 
+        model: nombreModelo, 
+        generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
       });
-    }
 
-  } catch (error) {
-    console.error("ERROR EN LA IA:", error);
-    res.status(500).json({ error: "Falla en el motor de IA", details: error.message });
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\nDATOS: " + prompt }] }],
+      });
+
+      const responseText = result.response.text();
+      const cleanJson = responseText.replace(/```json|```/g, "").trim();
+      
+      res.json(JSON.parse(cleanJson));
+      exito = true;
+      console.log(`Éxito con ${nombreModelo}`);
+
+    } catch (error) {
+      console.error(`Falla en ${nombreModelo}:`, error.message);
+      ultimoError = error.message;
+      // Si el error no es de saturación (503), quizás no valga la pena reintentar, 
+      // pero por ahora probaremos el siguiente modelo en la lista.
+    }
+  }
+
+  if (!exito) {
+    res.status(503).json({ 
+      error: "Saturación Global de IA", 
+      details: "Todos los modelos de respaldo están bajo alta demanda. Reintente en un momento.",
+      log: ultimoError
+    });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Servidor ACR.RADIX activo con gemini-2.5-flash"));
+app.listen(PORT, () => console.log("ACR.RADIX: Motor con redundancia iniciado."));
