@@ -21,8 +21,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
   
-  // Usamos el modelo estable
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  // ✅ Modelo actualizado
+  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   try {
     console.log("--- NUEVA PETICIÓN RECIBIDA ---");
@@ -32,7 +32,6 @@ app.post('/api/diagnostico', async (req, res) => {
     
     console.log("RESPUESTA CRUDA DE IA:", text);
 
-    // Buscador de JSON ultra-seguro
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}') + 1;
     
@@ -45,9 +44,7 @@ app.post('/api/diagnostico', async (req, res) => {
     return res.json(cleanJson);
 
   } catch (error) {
-    // ESTO NOS DIRÁ EL ERROR REAL EN LOS LOGS DE RENDER
     console.error("ERROR CRÍTICO EN MOTOR:", error.message);
-    
     res.status(500).json({ 
       error: "Error interno del servidor", 
       message: error.message 
