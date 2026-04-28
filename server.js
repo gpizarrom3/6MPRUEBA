@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
@@ -17,9 +17,8 @@ app.use(cors({
 app.use(express.json());
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
 // ✅ Modelo instanciado UNA sola vez fuera del handler
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // <--- Cambia 2.0 por 1.5
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
 
