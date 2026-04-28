@@ -4,7 +4,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 
-// Lista de URLs permitidas (Vercel + Local)
+// 1. CONFIGURACIÓN DE CORS (Links de Vercel + Local)
 const originsPermitidos = [
   'https://6-mpruebafrontend.vercel.app',
   'https://6-mpruebafrontend-git-main-guillermos-projects-bff23201.vercel.app',
@@ -22,60 +22,59 @@ app.use(express.json());
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.get('/', (req, res) => {
-  res.send("ACR.RADIX Server - Exclusivo Gemini 2.5 Flash");
+  res.send("ACR.RADIX Core - Resiliencia Activa (2.5 + Fallback)");
 });
-
-// Función de espera para reintentos
-const wait = (ms) => new Promise(res => setTimeout(res, ms));
 
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
   
-  // CONFIGURACIÓN ÚNICA: Solo usamos tu modelo de pago
-  const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.5-flash", 
-    generationConfig: { responseMimeType: "application/json", temperature: 0.3 }
-  });
-
+  // ESTRATEGIA: El 2.5 es el titular. El 1.5 es el respaldo si el 2.5 colapsa.
+  // Ambos consumen de tus 10.000 CLP de saldo.
+  const modelosPrioritarios = ["gemini-2.5-flash-latest", "gemini-1.5-flash-latest"];
+  
   const esReporteFinal = prompt.includes("RESPUESTAS");
   const systemPrompt = esReporteFinal 
     ? `Actúa como Experto en ACR Industrial. Genera un dictamen profesional en JSON.`
     : `Eres un consultor 6M. Genera un cuestionario técnico en JSON.`;
 
-  let intentos = 0;
-  const maxIntentos = 3;
-
-  while (intentos < maxIntentos) {
+  for (const nombreModelo of modelosPrioritarios) {
     try {
+      console.log(`Solicitando diagnóstico a: ${nombreModelo}...`);
+      const model = genAI.getGenerativeModel({ 
+        model: nombreModelo,
+        generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
+      });
+
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: systemPrompt + "\n\nDATOS: " + prompt }] }],
       });
 
       const responseText = result.response.text();
-      // Limpiamos el JSON por si viene con etiquetas markdown
+      // Limpieza de etiquetas JSON para evitar el "No disponible"
       const cleanJson = responseText.replace(/```json|```/g, "").trim();
       
+      console.log(`Éxito con modelo: ${nombreModelo}`);
       return res.json(JSON.parse(cleanJson));
 
     } catch (error) {
-      intentos++;
-      console.error(`Intento ${intentos} fallido con 2.5 Flash:`, error.message);
-
-      // Si es un error de saturación (503), esperamos y reintentamos con el MISMO modelo
-      if (error.message.includes('503') && intentos < maxIntentos) {
-        await wait(3000); 
-      } else if (intentos === maxIntentos) {
-        return res.status(503).json({ 
-          error: "Saturación en Google 2.5", 
-          details: "El modelo está bajo alta demanda. Reintente en un momento." 
-        });
-      } else if (!error.message.includes('503')) {
-        // Si es otro tipo de error (como seguridad o formato), cortamos de inmediato
-        return res.status(500).json({ error: "Falla interna", details: error.message });
+      // Si el error es 503 (Saturación), intentamos con el siguiente modelo de la lista
+      if (error.message.includes('503')) {
+        console.warn(`[AVISO] Modelo ${nombreModelo} saturado. Saltando al respaldo...`);
+        continue; 
       }
+      
+      // Si es otro tipo de error, lo reportamos directamente
+      console.error(`Error crítico en ${nombreModelo}:`, error.message);
+      return res.status(500).json({ error: "Falla en motor de IA", details: error.message });
     }
   }
+
+  // Si llegamos aquí, es que ambos modelos fallaron (caso muy raro con cuenta de pago)
+  res.status(503).json({ 
+    error: "Servidores de Google en mantenimiento", 
+    details: "Por favor, reintente en 30 segundos." 
+  });
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Backend ACR.RADIX: Corriendo con Gemini 2.5"));
+app.listen(PORT, () => console.log("ACR.RADIX: Motor industrial encendido."));
