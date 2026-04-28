@@ -1,59 +1,55 @@
 const express = require('express');
 const cors = require('cors');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+require('dotenv').config();
 
 const app = express();
-
-app.use(cors({
-  origin: [
-    'https://6-mpruebafrontend.vercel.app',
-    'https://6-mpruebafrontend-git-main-guillermos-projects-bff23201.vercel.app',
-    'http://localhost:3000'
-  ],
-  methods: ['GET', 'POST'],
-  credentials: true
-}));
-
+app.use(cors());
 app.use(express.json());
 
+// 1. Configuración de Google Gemini
+// Asegúrate de tener GEMINI_API_KEY en tus variables de entorno de Render
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// ✅ Modelo instanciado UNA sola vez fuera del handler
+
+// Usamos gemini-1.5-flash que es el modelo estable y rápido
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+// 2. Ruta para el diagnóstico
 app.post('/api/diagnostico', async (req, res) => {
-  const { prompt } = req.body;
+    const { prompt } = req.body;
 
-  // ✅ Validación del body
-  if (!prompt || typeof prompt !== 'string' || prompt.trim() === '') {
-    return res.status(400).json({ error: "El campo 'prompt' es requerido y no puede estar vacío." });
-  }
-
-  try {
-    console.log("--- NUEVA PETICIÓN RECIBIDA ---");
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    console.log("RESPUESTA CRUDA DE IA:", text);
-
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}') + 1;
-
-    if (start === -1 || end === 0) {
-      console.error("La IA no envió un JSON válido");
-      return res.status(500).json({ error: "Formato IA inválido", raw: text });
+    if (!prompt) {
+        return res.status(400).json({ message: "El prompt es requerido" });
     }
 
-    const cleanJson = JSON.parse(text.substring(start, end));
-    return res.json(cleanJson);
+    try {
+        // Llamada a la IA
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        const text = response.text();
 
-  } catch (error) {
-    console.error("ERROR CRÍTICO EN MOTOR:", error.message);
-    res.status(500).json({
-      error: "Error interno del servidor",
-      message: error.message
-    });
-  }
+        // Intentamos limpiar la respuesta por si la IA devuelve Markdown (```json ... ```)
+        const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        
+        try {
+            const jsonResponse = JSON.parse(cleanJson);
+            res.json(jsonResponse);
+        } catch (parseError) {
+            // Si no es JSON puro, enviamos el texto tal cual
+            res.json({ hipotesis: text });
+        }
+
+    } catch (error) {
+        console.error("Error crítico en Gemini:", error);
+        res.status(500).json({ 
+            message: "Error al procesar con IA", 
+            error: error.message 
+        });
+    }
 });
 
+// 3. Inicio del servidor
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Servidor ACR.RADIX blindado y activo en puerto " + PORT));
+app.listen(PORT, () => {
+    console.log(`Servidor de Auditoría corriendo en puerto ${PORT}`);
+});
