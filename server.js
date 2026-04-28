@@ -21,24 +21,25 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
   
-  // Usamos el modelo más estable del ecosistema
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  // Usamos el sufijo -latest para forzar la conexión en cuentas de pago
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text();
     
-    // Extraemos el JSON limpiamente
+    // Este extractor es a prueba de balas: busca el primer { y el último }
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}') + 1;
     const jsonString = text.substring(start, end);
     
     return res.json(JSON.parse(jsonString));
   } catch (error) {
-    console.error("Error:", error.message);
+    console.error("Error técnico:", error.message);
+    // Enviamos el error real para saber si es falta de permisos
     res.status(500).json({ error: error.message });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Servidor ACR Online"));
+app.listen(PORT, () => console.log("ACR.RADIX: Motor en línea y facturando."));
