@@ -4,14 +4,12 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 
-const originsPermitidos = [
-  'https://6-mpruebafrontend.vercel.app',
-  'https://6-mpruebafrontend-git-main-guillermos-projects-bff23201.vercel.app',
-  'http://localhost:3000'
-];
-
 app.use(cors({
-  origin: originsPermitidos,
+  origin: [
+    'https://6-mpruebafrontend.vercel.app',
+    'https://6-mpruebafrontend-git-main-guillermos-projects-bff23201.vercel.app',
+    'http://localhost:3000'
+  ],
   methods: ['GET', 'POST'],
   credentials: true
 }));
@@ -23,34 +21,38 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 app.post('/api/diagnostico', async (req, res) => {
   const { prompt } = req.body;
   
-  // Usamos los nombres que Google garantiza que NO dan 404
-  const modelos = ["gemini-1.5-flash", "gemini-1.5-pro"];
+  // Nombres de modelos estándar que NO fallan (v1/v1beta)
+  const modelos = ["gemini-1.5-flash", "gemini-pro"];
   
   const esReporteFinal = prompt.includes("RESPUESTAS");
   const systemPrompt = esReporteFinal 
-    ? `Eres un experto en ACR. Responde SOLO en JSON con este formato: {"hipotesis": "...", "recomendaciones": []}`
-    : `Eres un consultor 6M. Responde SOLO en JSON con este formato: {"categorias": [{"nombre": "...", "preguntas": [{"texto": "..."}]}]}`;
+    ? `Eres un experto en ACR. Responde únicamente con un objeto JSON: {"hipotesis": "...", "recomendaciones": []}`
+    : `Eres un consultor 6M. Responde únicamente con un objeto JSON: {"categorias": [{"nombre": "...", "preguntas": [{"texto": "..."}]}]}`;
 
-  for (const nombreModelo of modelos) {
+  for (const nombre of modelos) {
     try {
-      console.log(`Intentando con: ${nombreModelo}`);
-      const model = genAI.getGenerativeModel({ model: nombreModelo });
-      const result = await model.generateContent(systemPrompt + "\n\nDATOS: " + prompt);
-      const response = await result.response;
-      const text = response.text();
+      console.log(`Intentando con: ${nombre}`);
+      const model = genAI.getGenerativeModel({ model: nombre });
       
-      // Limpieza de JSON
-      const cleanJson = text.replace(/```json|```/g, "").trim();
-      return res.json(JSON.parse(cleanJson));
+      const result = await model.generateContent(systemPrompt + "\n\nDATOS: " + prompt);
+      const text = result.response.text();
+
+      // ESTO ES CLAVE: Extrae el JSON incluso si la IA manda basura alrededor
+      const jsonMatch = text.match(/\{[\s\S]*\}/); 
+      if (!jsonMatch) throw new Error("No se encontró JSON en la respuesta");
+      
+      const cleanJson = JSON.parse(jsonMatch[0]);
+      console.log(`✅ Éxito con ${nombre}`);
+      return res.json(cleanJson);
 
     } catch (error) {
-      console.error(`Falla en ${nombreModelo}:`, error.message);
-      continue; // Si falla uno, prueba el otro
+      console.error(`Error en ${nombre}:`, error.message);
+      continue; 
     }
   }
 
-  res.status(503).json({ error: "No se pudo conectar con Gemini. Reintente." });
+  res.status(500).json({ error: "Todos los modelos fallaron. Revise su API KEY o cuota." });
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Servidor ACR Activo"));
+app.listen(PORT, () => console.log("Servidor ACR.RADIX estable."));
