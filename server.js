@@ -25,18 +25,13 @@ app.post('/api/diagnostico', async (req, res) => {
   try {
     const result = await model.generateContent(prompt);
     const text = result.response.text();
-    
-    // Extractor de JSON infalible
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}') + 1;
-    const jsonString = text.substring(start, end);
-    
-    return res.json(JSON.parse(jsonString));
+    return res.json(JSON.parse(text.substring(start, end)));
   } catch (error) {
-    console.error("Error servidor:", error.message);
-    res.status(500).json({ error: "Falla en IA", details: error.message });
+    res.status(500).json({ error: error.message });
   }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Servidor ACR.RADIX Operativo"));
+app.listen(PORT, () => console.log("Servidor ACR Operativo"));
