@@ -1,54 +1,57 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// RECUERDA: Configura GEMINI_API_KEY en las variables de entorno de Render
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
 app.post('/api/diagnostico', async (req, res) => {
-    const { prompt } = req.body;
-    if (!prompt) return res.status(400).json({ message: "Falta el prompt" });
+  try {
+    const { tipo, datos } = req.body;
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-2.5-flash",
+      generationConfig: { responseMimeType: "application/json" }
+    });
 
-    try {
-        const API_KEY = process.env.GEMINI_API_KEY;
-        
-        // USAMOS EL MODELO QUE APARECE PRIMERO EN TU LISTA
-        // Cambiamos v1 por v1beta porque es donde aparece listado tu modelo
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
+    let systemPrompt = "";
 
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }]
-            })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            console.error("Error detallado:", data);
-            return res.status(response.status).json({ error: data.error?.message });
-        }
-
-        // Estructura de respuesta estándar de Gemini
-        const aiText = data.candidates[0].content.parts[0].text;
-        
-        // Limpiamos el JSON por si la IA pone texto extra
-        const cleanJson = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
-        
-        try {
-            res.json(JSON.parse(cleanJson));
-        } catch (e) {
-            res.json({ hipotesis: aiText });
-        }
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    if (tipo === "PREGUNTAS") {
+      systemPrompt = `Actúa como Auditor Senior 6M. Genera preguntas para un ALCANCE PRELIMINAR basadas en los SENTIDOS (vista, oído, tacto, olfato). 
+      NO pidas datos duros o medidas exactas. 
+      Estructura el JSON así:
+      {
+        "categorias": [
+          {
+            "nombre": "Mano de Obra",
+            "preguntas": [{ "texto": "¿Notas cansancio en el personal?", "aviso": "El factor humano es el 70% de los fallos." }]
+          },
+          { "nombre": "Maquinaria", "preguntas": [...] },
+          { "nombre": "Métodos", "preguntas": [...] },
+          { "nombre": "Materiales", "preguntas": [...] },
+          { "nombre": "Medio Ambiente", "preguntas": [...] },
+          { "nombre": "Medición", "preguntas": [...] }
+        ]
+      }`;
+    } else {
+      systemPrompt = `Genera un Informe de Causa Raíz (ACR) basado en las 6M.
+      JSON: {
+        "resumen_6m": { "Mano de Obra": "...", "Maquinaria": "...", "Métodos": "...", "Materiales": "...", "Medio Ambiente": "...", "Medición": "..." },
+        "resumen_general": "...",
+        "hipotesis": "...",
+        "recomendaciones": ["...", "..."]
+      }`;
     }
+
+    const result = await model.generateContent(systemPrompt + "\n\nDatos: " + JSON.stringify(datos));
+    res.json(JSON.parse(result.response.text()));
+  } catch (error) {
+    res.status(500).json({ error: "Error en el motor de IA" });
+  }
 });
 
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-    console.log(`✅ Servidor AUDITORIA-6M activo con Gemini 2.5 Flash`);
-});
+app.listen(PORT, () => console.log(`Servidor 6M en puerto ${PORT}`));
