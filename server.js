@@ -15,7 +15,7 @@ app.post('/api/diagnostico', async (req, res) => {
         
         // USAMOS EL MODELO QUE APARECE PRIMERO EN TU LISTA
         // Cambiamos v1 por v1beta porque es donde aparece listado tu modelo
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-001:generateContent?key=${API_KEY}`;
 
         const response = await fetch(url, {
             method: 'POST',
