@@ -6,50 +6,64 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// RECUERDA: Configura GEMINI_API_KEY en las variables de entorno de Render
+// RECUERDA: Configura tu API Key en Render -> Environment -> GEMINI_API_KEY
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.post('/api/diagnostico', async (req, res) => {
   try {
     const { tipo, datos } = req.body;
+    
+    // Mantenemos tu versión específica
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-2.5-flash",
-      generationConfig: { responseMimeType: "application/json" }
+      model: "gemini-2.5-flash" 
     });
 
-    let systemPrompt = "";
+    let prompt = "";
 
     if (tipo === "PREGUNTAS") {
-      systemPrompt = `Actúa como Auditor Senior 6M. Genera preguntas para un ALCANCE PRELIMINAR basadas en los SENTIDOS (vista, oído, tacto, olfato). 
-      NO pidas datos duros o medidas exactas. 
-      Estructura el JSON así:
+      prompt = `Actúa como un experto en manufactura y el método Ishikawa. 
+      Analiza este contexto: "${datos.contexto}" y este síntoma: "${datos.sintomas}".
+      Genera 6 categorías (Mano de Obra, Maquinaria, Métodos, Materiales, Medio Ambiente, Medición).
+      Para cada categoría crea 2 preguntas sensoriales.
+      RESPONDE EXCLUSIVAMENTE EN FORMATO JSON PURO, sin textos extras:
       {
         "categorias": [
           {
             "nombre": "Mano de Obra",
-            "preguntas": [{ "texto": "¿Notas cansancio en el personal?", "aviso": "El factor humano es el 70% de los fallos." }]
-          },
-          { "nombre": "Maquinaria", "preguntas": [...] },
-          { "nombre": "Métodos", "preguntas": [...] },
-          { "nombre": "Materiales", "preguntas": [...] },
-          { "nombre": "Medio Ambiente", "preguntas": [...] },
-          { "nombre": "Medición", "preguntas": [...] }
+            "preguntas": [
+              { "texto": "¿Ves signos de fatiga?", "aviso": "Observación humana" }
+            ]
+          }
         ]
       }`;
     } else {
-      systemPrompt = `Genera un Informe de Causa Raíz (ACR) basado en las 6M.
-      JSON: {
-        "resumen_6m": { "Mano de Obra": "...", "Maquinaria": "...", "Métodos": "...", "Materiales": "...", "Medio Ambiente": "...", "Medición": "..." },
-        "resumen_general": "...",
-        "hipotesis": "...",
-        "recomendaciones": ["...", "..."]
+      prompt = `Genera un reporte de causa raíz basado en estas respuestas sensoriales: ${JSON.stringify(datos.respuestas)}.
+      RESPONDE EXCLUSIVAMENTE EN FORMATO JSON PURO:
+      {
+        "resumen_6m": { "Mano de Obra": "resumen...", "Maquinaria": "resumen..." },
+        "hipotesis": "causa probable...",
+        "recomendaciones": ["rec 1", "rec 2"]
       }`;
     }
 
-    const result = await model.generateContent(systemPrompt + "\n\nDatos: " + JSON.stringify(datos));
-    res.json(JSON.parse(result.response.text()));
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    // LIMPIEZA DE SEGURIDAD (Quita ```json ... ``` si la IA los pone)
+    const cleanJson = text.replace(/```json|```/g, "").trim();
+    
+    try {
+      const parsedData = JSON.parse(cleanJson);
+      res.json(parsedData);
+    } catch (parseError) {
+      console.error("Error parseando JSON de la IA:", text);
+      res.status(500).json({ error: "La IA entregó un formato inválido" });
+    }
+
   } catch (error) {
-    res.status(500).json({ error: "Error en el motor de IA" });
+    console.error("Error crítico en Render:", error);
+    res.status(500).json({ error: "Fallo en la conexión con Gemini 2.5", detalle: error.message });
   }
 });
 
