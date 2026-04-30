@@ -25,10 +25,25 @@ app.post('/api/diagnostico', async (req, res) => {
       RESPONDE SOLO EL JSON, SIN COMENTARIOS NI MARKDOWN:
       { "categorias": [ { "nombre": "...", "preguntas": [{ "texto": "...", "riesgo": "..." }] } ] }`;
     } else {
-      prompt = `Genera un INFORME ACR basado en: ${JSON.stringify(datos.respuestas)}.
-      RESPONDE SOLO EL JSON:
-      { "id_informe": "ACR-7039", "resumen_ejecutivo": "...", "analisis_6m": {...}, "hipotesis_raiz": "...", "conclusiones": [], "plan_accion": [] }`;
-    }
+    // IMPORTANTE: Este prompt obliga a la IA a seguir el formato Premium
+    prompt = `Genera un INFORME TÉCNICO DE INGENIERÍA (ACR) basado en estas respuestas 6M: ${JSON.stringify(datos.respuestas)}.
+    
+    RESPONDE EXCLUSIVAMENTE CON ESTE FORMATO JSON:
+    {
+      "id_informe": "ACR-7039",
+      "resumen_ejecutivo": "Aquí va un párrafo técnico sobre el hallazgo...",
+      "analisis_6m": {
+        "Maquinaria": "Descripción técnica...",
+        "Material": "Descripción técnica...",
+        "Medio Ambiente": "Descripción técnica...",
+        "Metodo": "Descripción técnica...",
+        "Medicion": "Descripción técnica...",
+        "Mano de Obra": "Descripción técnica..."
+      },
+      "hipotesis_raiz": "La causa raíz probable es...",
+      "conclusiones": ["Conclusión 1", "Conclusión 2", "Conclusión 3"],
+      "plan_accion": ["Acción 1", "Acción 2", "Acción 3"]
+    }`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
